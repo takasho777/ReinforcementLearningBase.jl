@@ -239,9 +239,18 @@ MultiThreadEnv(f, n) = MultiThreadEnv([f() for _ in 1:n])
 @forward MultiThreadEnv.envs Base.getindex, Base.length, Base.setindex!, Base.iterate
 
 function (env::MultiThreadEnv)(actions)
+    N = ndims(actions)
     @sync for i in 1:length(env)
         @spawn begin
-            env[i](actions[i])
+            if N == 1
+                env[i](actions[i])
+            else
+                action = selectdim(actions, N, i)
+                if length(action) == 1
+                    action = action[1]
+                end
+                env[i](action)
+            end
         end
     end
 end
