@@ -10,7 +10,7 @@ export SubjectiveEnv,
 using MacroTools: @forward
 using Random
 
-import Base.Threads.@spawn
+import Base.Threads.@threads
 
 #####
 # DefaultStateStyleEnv
@@ -227,7 +227,7 @@ get_legal_actions(env::ActionTransformedEnv, args...) =
     MultiThreadEnv(envs::Vector{<:AbstractEnv})
 
 Wrap multiple environments into one environment.
-Each environment will run in parallel by leveraging `Threads.@spawn`.
+Each environment will run in parallel by leveraging `Threads.@threads`.
 So remember to set the environment variable `JULIA_NUM_THREADS`!
 """
 struct MultiThreadEnv{E} <: AbstractEnv
@@ -240,17 +240,15 @@ MultiThreadEnv(f, n) = MultiThreadEnv([f() for _ in 1:n])
 
 function (env::MultiThreadEnv)(actions)
     N = ndims(actions)
-    @sync for i in 1:length(env)
-        @spawn begin
-            if N == 1
-                env[i](actions[i])
-            else
-                action = selectdim(actions, N, i)
-                if length(action) == 1
-                    action = action[1]
-                end
-                env[i](action)
+    @threads for i in 1:length(env)
+        if N == 1
+            env[i](actions[i])
+        else
+            action = selectdim(actions, N, i)
+            if length(action) == 1
+                action = action[1]
             end
+            env[i](action)
         end
     end
 end
@@ -261,11 +259,9 @@ function reset!(env::MultiThreadEnv; is_force = false)
             reset!(env[i])
         end
     else
-        @sync for i in 1:length(env)
+        @threads for i in 1:length(env)
             if get_terminal(env[i])
-                @spawn begin
-                    reset!(env[i])
-                end
+                reset!(env[i])
             end
         end
     end
